@@ -3,27 +3,27 @@ local Server = {}
 local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
 
-local DataStore = DataStoreService:GetDataStore("A110")
-local LocalData = require(script.Parent.LocalData)
+local DataStore = DataStoreService:GetDataStore("A110") -- you can change the names of all these datastores to personal preference.
+local LocalData = require(script.Parent.LocalData) -- this block is explained in readme
 local LockStore = DataStoreService:GetDataStore("A110LOCKS")
 local Backup = DataStoreService:GetDataStore("A110BACKUPS")
-local playerCache = {}
+local playerCache = {} -- table where all players are cached, acts as server random access memory (RAM)
 
 local OnDataLoaded = game:GetService("ReplicatedStorage").RemoteFunctions.ImportantData.OnDataLoaded
 
-local LTIMEOUT = 50
+local LTIMEOUT = 50 -- lock debounce
 
 -- Confirms data is working
 local function IsAllZero(data)
 	for _, v in pairs(data) do
 		if v ~= 0 then
-			return false
+		return false -- lets you know if the player has data values of 0, which in my case shouldnt happen, applies in applicable regions of your game.
 		end
 	end
 	return true
 end
 
-local function checkLocks(UserID)
+local function checkLocks(UserID) -- checks for any session locks on the player
 	local lockKey = "lock_" .. UserID
 	local now = os.time()
 	
@@ -35,7 +35,7 @@ local function checkLocks(UserID)
 		return false
 	end
 	
-	if lockdata == nil or (now - lockdata.timestamp) > LTIMEOUT then
+	if lockdata == nil or (now - lockdata.timestamp) > LTIMEOUT then -- checks if there is no lock or the lock has timed out
 		local lockValue = {
 			serverId = game.JobId,
 			timestamp = now
@@ -49,7 +49,7 @@ local function checkLocks(UserID)
 			return true
 		else
 			warn("Kicking player, failed to set lock:", err)
-			game.Players:GetPlayerByUserId(UserID):Kick("Couldnt get lock. Data error 2, rejoin in {50} seconds.", err)
+			game.Players:GetPlayerByUserId(UserID):Kick("Couldnt get lock. Data error 2, rejoin in {50} seconds.", err) -- kicks the player since data could not be accessed, this usually indicates a critical issue and you should contact draddev on discord if any case happens.
 			return false
 		end
 		
@@ -58,7 +58,7 @@ local function checkLocks(UserID)
 	
 end
 
-function Server.releaseLock(userId)
+function Server.releaseLock(userId) -- this can be used on player leaving to release any locks on the player
 	local lockKey = "lock_" .. userId
 	local success, err = pcall(function()
 		LockStore:RemoveAsync(lockKey)
@@ -69,7 +69,7 @@ end
 -- Converts folders to a table, not limited to leaderstats
 local function LeaderstatsToTable(leaderstats)
 	local data = {}
-	for _, stat in pairs(leaderstats:GetChildren()) do
+	for _, stat in pairs(leaderstats:GetChildren()) do -- packing all values applicable in the folder into a table
 		print("Packing stat:", stat.Name, "=", stat.Value)
 		data[stat.Name] = stat.Value
 	end
@@ -78,7 +78,7 @@ local function LeaderstatsToTable(leaderstats)
 end
 
 -- Always call this before anything else on game start to prevent glitches.
-function Server.GetData(player)
+function Server.GetData(player) -- loads all data, basically initiates the game.
 	local locked = checkLocks(player.UserId)
 	if not locked then
 		-- This will kick the player if their session lock is in use.
@@ -88,7 +88,7 @@ function Server.GetData(player)
 
 
 	local success, data = pcall(function()
-		return DataStore:GetAsync(player.UserId)
+		return DataStore:GetAsync(player.UserId) -- basically just grabbing data stored in datastores
 	end)
 
 
@@ -96,7 +96,7 @@ function Server.GetData(player)
 	if success then
 		if data then
 			print("Raw Data From Store:", data)
-			local decoded = HttpService:JSONDecode(data)
+			local decoded = HttpService:JSONDecode(data) -- unpacks packed data, which gets packed in line 148
 			print("Decoded Data Table:", decoded)
 
 			if IsAllZero(decoded) then
@@ -110,7 +110,7 @@ function Server.GetData(player)
 			end
 		else
 			print("No data found. Using template.")
-			local template = LocalData.DataTemplate
+			local template = LocalData.DataTemplate -- Data couldnt be found so it is reverting to default templates, you should have a seperate module for this (suggested, less blocky, easier to edit)
 			playerCache[player.UserId] = template
 			return template
 		end
@@ -121,7 +121,7 @@ function Server.GetData(player)
 end
 
 -- Load data
-function Server.LoadData(player)
+function Server.LoadData(player) -- loads data, SHOULD NOT BE CALLED BEFORE GETDATA
 	local playerData = playerCache[player.UserId]
 	local LS = Instance.new("Folder")
 	LS.Name = "leaderstats"
@@ -134,14 +134,14 @@ function Server.LoadData(player)
 		val.Parent = LS
 	end
 
-	makeStat("yournamehere", playerData.yournamehere or 0)
+	makeStat("yournamehere", playerData.yournamehere or 0) -- these should be named after your data, these are all lines in my game, but with their respective names.
 	makeStat("yournamehere", playerData.yournamehere or 0)
 	makeStat("yournamehere", playerData.yournamehere or 0)
 	OnDataLoaded:FireClient(player)
 end
 
 -- Function to encode data
-function Server.EncodeTest(player)
+function Server.EncodeTest(player) -- currently being improved on, hence the "test" in it, but it is in a working state and works 100%.
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if leaderstats then
 		local statsTable = LeaderstatsToTable(leaderstats)
@@ -155,7 +155,7 @@ function Server.EncodeTest(player)
 end
 
 
-function Server.SaveData(player)
+function Server.SaveData(player) -- saves player data, should be called every 60 seconds and on player leaving.
 	local timestamp = os.time()
 	local backupKey = player.UserId .. ":" .. timestamp
 	
@@ -181,7 +181,7 @@ function Server.SaveData(player)
 	print("Saved data with backup.".. player.UserId)
 end
 
-local function ROLLBACK_DATA(userId)
+local function ROLLBACK_DATA(userId) -- data rollbacking, should only be used in cases of data corruption, cheating, or glitches.
 	local AttemptKeys = {
 		userId .. ":" .. tostring(os.time() - 60),
 		userId .. ":" .. tostring(os.time() - 120),
@@ -195,7 +195,7 @@ local function ROLLBACK_DATA(userId)
 		if success and data then
 			return data
 		else
-			warn("Critical Data Issue, Could not process rollback.")
+			warn("Critical Data Issue, Could not process rollback.") -- in this case either revert to a screenshot or completely reset the data. Data snapshots on the cloud will be added soon.
 			return
 		end
 	end
