@@ -205,7 +205,7 @@ end
 
 function Server.OnPlayerRemoving(plr)
 	Server.SaveData(plr)
-	Server.ReleaseLock(plr.UserId)
+	Server.releaseLock(plr.UserId)
 end
 
 local function Init(plr)
